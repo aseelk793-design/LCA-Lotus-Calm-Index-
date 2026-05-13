@@ -5,371 +5,1561 @@
  * NeuroFlow OS API
  * OpenAPI spec version: 0.1.0
  */
-import * as zod from "zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import type {
+  MutationFunction,
+  QueryFunction,
+  QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult,
+} from "@tanstack/react-query";
+
+import type {
+  BehavioralSnapshot,
+  CognitiveProfile,
+  DashboardSummary,
+  GetProductivityTrendParams,
+  HealthStatus,
+  HourlyFocusPoint,
+  Insight,
+  Intervention,
+  ListInterventionsParams,
+  ListPredictionsParams,
+  ListSessionsParams,
+  Prediction,
+  ProfileUpdate,
+  Session,
+  SessionInput,
+  SessionUpdate,
+  SnapshotInput,
+  SnapshotResult,
+  TrendPoint,
+} from "./api.schemas";
+
+import { customFetch } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
+
+type AwaitedInput<T> = PromiseLike<T> | T;
+
+type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
  * @summary Health check
  */
-export const HealthCheckResponse = zod.object({
-  status: zod.string(),
-});
+export const getHealthCheckUrl = () => {
+  return `/api/healthz`;
+};
+
+export const healthCheck = async (
+  options?: RequestInit,
+): Promise<HealthStatus> => {
+  return customFetch<HealthStatus>(getHealthCheckUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getHealthCheckQueryKey = () => {
+  return [`/api/healthz`] as const;
+};
+
+export const getHealthCheckQueryOptions = <
+  TData = Awaited<ReturnType<typeof healthCheck>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof healthCheck>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getHealthCheckQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof healthCheck>>> = ({
+    signal,
+  }) => healthCheck({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof healthCheck>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type HealthCheckQueryResult = NonNullable<
+  Awaited<ReturnType<typeof healthCheck>>
+>;
+export type HealthCheckQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Health check
+ */
+
+export function useHealthCheck<
+  TData = Awaited<ReturnType<typeof healthCheck>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof healthCheck>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List all sessions (most recent first)
  */
-export const listSessionsQueryLimitDefault = 20;
-export const listSessionsQueryOffsetDefault = 0;
+export const getListSessionsUrl = (params?: ListSessionsParams) => {
+  const normalizedParams = new URLSearchParams();
 
-export const ListSessionsQueryParams = zod.object({
-  limit: zod.coerce.number().default(listSessionsQueryLimitDefault),
-  offset: zod.coerce.number().default(listSessionsQueryOffsetDefault),
-});
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
 
-export const listSessionsResponseSnapshotCountDefault = 0;
+  const stringifiedParams = normalizedParams.toString();
 
-export const ListSessionsResponseItem = zod.object({
-  id: zod.number(),
-  label: zod.string().nullish(),
-  status: zod.enum(["active", "completed", "paused"]),
-  startedAt: zod.coerce.date(),
-  endedAt: zod.coerce.date().nullish(),
-  durationMinutes: zod.number().nullish(),
-  focusScore: zod.number().describe("0-100 average focus score for session"),
-  fatigueIndex: zod.number().describe("0-100 fatigue index"),
-  distractionRisk: zod.number().describe("0-100 distraction risk"),
-  typingWpm: zod.number().nullish().describe("Average typing speed in WPM"),
-  pauseRate: zod.number().nullish().describe("Average pause frequency"),
-  backspaceRate: zod.number().nullish(),
-  snapshotCount: zod.number().default(listSessionsResponseSnapshotCountDefault),
-});
-export const ListSessionsResponse = zod.array(ListSessionsResponseItem);
+  return stringifiedParams.length > 0
+    ? `/api/sessions?${stringifiedParams}`
+    : `/api/sessions`;
+};
+
+export const listSessions = async (
+  params?: ListSessionsParams,
+  options?: RequestInit,
+): Promise<Session[]> => {
+  return customFetch<Session[]>(getListSessionsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSessionsQueryKey = (params?: ListSessionsParams) => {
+  return [`/api/sessions`, ...(params ? [params] : [])] as const;
+};
+
+export const getListSessionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSessions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListSessionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSessions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSessionsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSessions>>> = ({
+    signal,
+  }) => listSessions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSessions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSessionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSessions>>
+>;
+export type ListSessionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all sessions (most recent first)
+ */
+
+export function useListSessions<
+  TData = Awaited<ReturnType<typeof listSessions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListSessionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSessions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSessionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Start a new focus session
  */
-export const CreateSessionBody = zod.object({
-  label: zod.string().optional(),
-});
+export const getCreateSessionUrl = () => {
+  return `/api/sessions`;
+};
+
+export const createSession = async (
+  sessionInput: SessionInput,
+  options?: RequestInit,
+): Promise<Session> => {
+  return customFetch<Session>(getCreateSessionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sessionInput),
+  });
+};
+
+export const getCreateSessionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSession>>,
+    TError,
+    { data: BodyType<SessionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSession>>,
+  TError,
+  { data: BodyType<SessionInput> },
+  TContext
+> => {
+  const mutationKey = ["createSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSession>>,
+    { data: BodyType<SessionInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createSession(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSession>>
+>;
+export type CreateSessionMutationBody = BodyType<SessionInput>;
+export type CreateSessionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Start a new focus session
+ */
+export const useCreateSession = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSession>>,
+    TError,
+    { data: BodyType<SessionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSession>>,
+  TError,
+  { data: BodyType<SessionInput> },
+  TContext
+> => {
+  return useMutation(getCreateSessionMutationOptions(options));
+};
 
 /**
  * @summary Get the currently active session (if any)
  */
-export const getActiveSessionResponseSnapshotCountDefault = 0;
+export const getGetActiveSessionUrl = () => {
+  return `/api/sessions/active`;
+};
 
-export const GetActiveSessionResponse = zod.object({
-  id: zod.number(),
-  label: zod.string().nullish(),
-  status: zod.enum(["active", "completed", "paused"]),
-  startedAt: zod.coerce.date(),
-  endedAt: zod.coerce.date().nullish(),
-  durationMinutes: zod.number().nullish(),
-  focusScore: zod.number().describe("0-100 average focus score for session"),
-  fatigueIndex: zod.number().describe("0-100 fatigue index"),
-  distractionRisk: zod.number().describe("0-100 distraction risk"),
-  typingWpm: zod.number().nullish().describe("Average typing speed in WPM"),
-  pauseRate: zod.number().nullish().describe("Average pause frequency"),
-  backspaceRate: zod.number().nullish(),
-  snapshotCount: zod
-    .number()
-    .default(getActiveSessionResponseSnapshotCountDefault),
-});
+export const getActiveSession = async (
+  options?: RequestInit,
+): Promise<Session> => {
+  return customFetch<Session>(getGetActiveSessionUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetActiveSessionQueryKey = () => {
+  return [`/api/sessions/active`] as const;
+};
+
+export const getGetActiveSessionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getActiveSession>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getActiveSession>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetActiveSessionQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getActiveSession>>
+  > = ({ signal }) => getActiveSession({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getActiveSession>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetActiveSessionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getActiveSession>>
+>;
+export type GetActiveSessionQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the currently active session (if any)
+ */
+
+export function useGetActiveSession<
+  TData = Awaited<ReturnType<typeof getActiveSession>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getActiveSession>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetActiveSessionQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get a session by ID
  */
-export const GetSessionParams = zod.object({
-  id: zod.coerce.number(),
-});
+export const getGetSessionUrl = (id: number) => {
+  return `/api/sessions/${id}`;
+};
 
-export const getSessionResponseSnapshotCountDefault = 0;
+export const getSession = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Session> => {
+  return customFetch<Session>(getGetSessionUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
 
-export const GetSessionResponse = zod.object({
-  id: zod.number(),
-  label: zod.string().nullish(),
-  status: zod.enum(["active", "completed", "paused"]),
-  startedAt: zod.coerce.date(),
-  endedAt: zod.coerce.date().nullish(),
-  durationMinutes: zod.number().nullish(),
-  focusScore: zod.number().describe("0-100 average focus score for session"),
-  fatigueIndex: zod.number().describe("0-100 fatigue index"),
-  distractionRisk: zod.number().describe("0-100 distraction risk"),
-  typingWpm: zod.number().nullish().describe("Average typing speed in WPM"),
-  pauseRate: zod.number().nullish().describe("Average pause frequency"),
-  backspaceRate: zod.number().nullish(),
-  snapshotCount: zod.number().default(getSessionResponseSnapshotCountDefault),
-});
+export const getGetSessionQueryKey = (id: number) => {
+  return [`/api/sessions/${id}`] as const;
+};
+
+export const getGetSessionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSession>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSession>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSessionQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSession>>> = ({
+    signal,
+  }) => getSession(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSession>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSessionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSession>>
+>;
+export type GetSessionQueryError = ErrorType<void>;
+
+/**
+ * @summary Get a session by ID
+ */
+
+export function useGetSession<
+  TData = Awaited<ReturnType<typeof getSession>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSession>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSessionQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Update a session (e.g., stop it)
  */
-export const UpdateSessionParams = zod.object({
-  id: zod.coerce.number(),
-});
+export const getUpdateSessionUrl = (id: number) => {
+  return `/api/sessions/${id}`;
+};
 
-export const UpdateSessionBody = zod.object({
-  status: zod.enum(["completed", "paused", "active"]).optional(),
-  label: zod.string().optional(),
-});
+export const updateSession = async (
+  id: number,
+  sessionUpdate: SessionUpdate,
+  options?: RequestInit,
+): Promise<Session> => {
+  return customFetch<Session>(getUpdateSessionUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sessionUpdate),
+  });
+};
 
-export const updateSessionResponseSnapshotCountDefault = 0;
+export const getUpdateSessionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSession>>,
+    TError,
+    { id: number; data: BodyType<SessionUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSession>>,
+  TError,
+  { id: number; data: BodyType<SessionUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
 
-export const UpdateSessionResponse = zod.object({
-  id: zod.number(),
-  label: zod.string().nullish(),
-  status: zod.enum(["active", "completed", "paused"]),
-  startedAt: zod.coerce.date(),
-  endedAt: zod.coerce.date().nullish(),
-  durationMinutes: zod.number().nullish(),
-  focusScore: zod.number().describe("0-100 average focus score for session"),
-  fatigueIndex: zod.number().describe("0-100 fatigue index"),
-  distractionRisk: zod.number().describe("0-100 distraction risk"),
-  typingWpm: zod.number().nullish().describe("Average typing speed in WPM"),
-  pauseRate: zod.number().nullish().describe("Average pause frequency"),
-  backspaceRate: zod.number().nullish(),
-  snapshotCount: zod
-    .number()
-    .default(updateSessionResponseSnapshotCountDefault),
-});
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSession>>,
+    { id: number; data: BodyType<SessionUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateSession(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSession>>
+>;
+export type UpdateSessionMutationBody = BodyType<SessionUpdate>;
+export type UpdateSessionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a session (e.g., stop it)
+ */
+export const useUpdateSession = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSession>>,
+    TError,
+    { id: number; data: BodyType<SessionUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSession>>,
+  TError,
+  { id: number; data: BodyType<SessionUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateSessionMutationOptions(options));
+};
 
 /**
  * @summary Get behavioral snapshots for a session
  */
-export const ListSessionSnapshotsParams = zod.object({
-  id: zod.coerce.number(),
-});
+export const getListSessionSnapshotsUrl = (id: number) => {
+  return `/api/sessions/${id}/snapshots`;
+};
 
-export const ListSessionSnapshotsResponseItem = zod.object({
-  id: zod.number(),
-  sessionId: zod.number(),
-  capturedAt: zod.coerce.date(),
-  typingWpm: zod.number(),
-  pauseCount: zod.number(),
-  pauseDurationMs: zod.number().optional(),
-  backspaceRate: zod.number(),
-  keystrokeCount: zod.number().optional(),
-  idleTimeMs: zod.number().optional(),
-  focusScore: zod.number(),
-  fatigueIndex: zod.number(),
-  distractionRisk: zod.number(),
-});
-export const ListSessionSnapshotsResponse = zod.array(
-  ListSessionSnapshotsResponseItem,
-);
+export const listSessionSnapshots = async (
+  id: number,
+  options?: RequestInit,
+): Promise<BehavioralSnapshot[]> => {
+  return customFetch<BehavioralSnapshot[]>(getListSessionSnapshotsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSessionSnapshotsQueryKey = (id: number) => {
+  return [`/api/sessions/${id}/snapshots`] as const;
+};
+
+export const getListSessionSnapshotsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSessionSnapshots>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSessionSnapshots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSessionSnapshotsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSessionSnapshots>>
+  > = ({ signal }) => listSessionSnapshots(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSessionSnapshots>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSessionSnapshotsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSessionSnapshots>>
+>;
+export type ListSessionSnapshotsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get behavioral snapshots for a session
+ */
+
+export function useListSessionSnapshots<
+  TData = Awaited<ReturnType<typeof listSessionSnapshots>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSessionSnapshots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSessionSnapshotsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Submit a behavioral snapshot (typing metrics, pauses, etc.)
  */
-export const SubmitSnapshotBody = zod.object({
-  sessionId: zod.number(),
-  typingWpm: zod.number(),
-  pauseCount: zod.number(),
-  pauseDurationMs: zod.number().optional(),
-  backspaceRate: zod.number(),
-  keystrokeCount: zod.number(),
-  idleTimeMs: zod.number().optional(),
-});
+export const getSubmitSnapshotUrl = () => {
+  return `/api/behavioral/snapshot`;
+};
+
+export const submitSnapshot = async (
+  snapshotInput: SnapshotInput,
+  options?: RequestInit,
+): Promise<SnapshotResult> => {
+  return customFetch<SnapshotResult>(getSubmitSnapshotUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(snapshotInput),
+  });
+};
+
+export const getSubmitSnapshotMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitSnapshot>>,
+    TError,
+    { data: BodyType<SnapshotInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitSnapshot>>,
+  TError,
+  { data: BodyType<SnapshotInput> },
+  TContext
+> => {
+  const mutationKey = ["submitSnapshot"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitSnapshot>>,
+    { data: BodyType<SnapshotInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return submitSnapshot(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitSnapshotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitSnapshot>>
+>;
+export type SubmitSnapshotMutationBody = BodyType<SnapshotInput>;
+export type SubmitSnapshotMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Submit a behavioral snapshot (typing metrics, pauses, etc.)
+ */
+export const useSubmitSnapshot = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitSnapshot>>,
+    TError,
+    { data: BodyType<SnapshotInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitSnapshot>>,
+  TError,
+  { data: BodyType<SnapshotInput> },
+  TContext
+> => {
+  return useMutation(getSubmitSnapshotMutationOptions(options));
+};
 
 /**
  * @summary Get the latest cognitive state prediction
  */
-export const GetCurrentPredictionResponse = zod.object({
-  id: zod.number(),
-  sessionId: zod.number(),
-  predictedAt: zod.coerce.date(),
-  focusScore: zod.number().describe("Current focus score 0-100"),
-  fatigueIndex: zod.number().describe("Fatigue level 0-100"),
-  distractionRisk: zod.number().describe("Distraction risk 0-100"),
-  focusTrend: zod.enum(["rising", "stable", "declining", "critical"]),
-  minutesUntilFocusDrop: zod
-    .number()
-    .nullish()
-    .describe("Predicted minutes until focus drop (null if stable)"),
-  alertLevel: zod
-    .enum(["none", "low", "medium", "high", "critical"])
-    .optional(),
-});
+export const getGetCurrentPredictionUrl = () => {
+  return `/api/predictions/current`;
+};
+
+export const getCurrentPrediction = async (
+  options?: RequestInit,
+): Promise<Prediction> => {
+  return customFetch<Prediction>(getGetCurrentPredictionUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCurrentPredictionQueryKey = () => {
+  return [`/api/predictions/current`] as const;
+};
+
+export const getGetCurrentPredictionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCurrentPrediction>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentPrediction>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCurrentPredictionQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCurrentPrediction>>
+  > = ({ signal }) => getCurrentPrediction({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentPrediction>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCurrentPredictionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCurrentPrediction>>
+>;
+export type GetCurrentPredictionQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the latest cognitive state prediction
+ */
+
+export function useGetCurrentPrediction<
+  TData = Awaited<ReturnType<typeof getCurrentPrediction>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCurrentPrediction>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCurrentPredictionQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get prediction history for the active or recent session
  */
-export const listPredictionsQueryLimitDefault = 60;
+export const getListPredictionsUrl = (params?: ListPredictionsParams) => {
+  const normalizedParams = new URLSearchParams();
 
-export const ListPredictionsQueryParams = zod.object({
-  sessionId: zod.coerce.number().optional(),
-  limit: zod.coerce.number().default(listPredictionsQueryLimitDefault),
-});
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
 
-export const ListPredictionsResponseItem = zod.object({
-  id: zod.number(),
-  sessionId: zod.number(),
-  predictedAt: zod.coerce.date(),
-  focusScore: zod.number().describe("Current focus score 0-100"),
-  fatigueIndex: zod.number().describe("Fatigue level 0-100"),
-  distractionRisk: zod.number().describe("Distraction risk 0-100"),
-  focusTrend: zod.enum(["rising", "stable", "declining", "critical"]),
-  minutesUntilFocusDrop: zod
-    .number()
-    .nullish()
-    .describe("Predicted minutes until focus drop (null if stable)"),
-  alertLevel: zod
-    .enum(["none", "low", "medium", "high", "critical"])
-    .optional(),
-});
-export const ListPredictionsResponse = zod.array(ListPredictionsResponseItem);
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/predictions/history?${stringifiedParams}`
+    : `/api/predictions/history`;
+};
+
+export const listPredictions = async (
+  params?: ListPredictionsParams,
+  options?: RequestInit,
+): Promise<Prediction[]> => {
+  return customFetch<Prediction[]>(getListPredictionsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPredictionsQueryKey = (params?: ListPredictionsParams) => {
+  return [`/api/predictions/history`, ...(params ? [params] : [])] as const;
+};
+
+export const getListPredictionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPredictions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListPredictionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPredictions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPredictionsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listPredictions>>> = ({
+    signal,
+  }) => listPredictions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPredictions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPredictionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPredictions>>
+>;
+export type ListPredictionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get prediction history for the active or recent session
+ */
+
+export function useListPredictions<
+  TData = Awaited<ReturnType<typeof listPredictions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListPredictionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPredictions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPredictionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get list of recent interventions
  */
-export const listInterventionsQueryLimitDefault = 10;
+export const getListInterventionsUrl = (params?: ListInterventionsParams) => {
+  const normalizedParams = new URLSearchParams();
 
-export const ListInterventionsQueryParams = zod.object({
-  sessionId: zod.coerce.number().optional(),
-  limit: zod.coerce.number().default(listInterventionsQueryLimitDefault),
-});
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
 
-export const ListInterventionsResponseItem = zod.object({
-  id: zod.number(),
-  sessionId: zod.number(),
-  type: zod.enum([
-    "break_suggestion",
-    "focus_mode",
-    "reduce_noise",
-    "warning",
-    "encouragement",
-  ]),
-  message: zod.string(),
-  triggeredAt: zod.coerce.date(),
-  acknowledged: zod.boolean(),
-  acknowledgedAt: zod.coerce.date().nullish(),
-});
-export const ListInterventionsResponse = zod.array(
-  ListInterventionsResponseItem,
-);
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/interventions?${stringifiedParams}`
+    : `/api/interventions`;
+};
+
+export const listInterventions = async (
+  params?: ListInterventionsParams,
+  options?: RequestInit,
+): Promise<Intervention[]> => {
+  return customFetch<Intervention[]>(getListInterventionsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListInterventionsQueryKey = (
+  params?: ListInterventionsParams,
+) => {
+  return [`/api/interventions`, ...(params ? [params] : [])] as const;
+};
+
+export const getListInterventionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listInterventions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListInterventionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listInterventions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListInterventionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listInterventions>>
+  > = ({ signal }) => listInterventions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listInterventions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListInterventionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listInterventions>>
+>;
+export type ListInterventionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get list of recent interventions
+ */
+
+export function useListInterventions<
+  TData = Awaited<ReturnType<typeof listInterventions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListInterventionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listInterventions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListInterventionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Acknowledge / dismiss an intervention
  */
-export const AcknowledgeInterventionParams = zod.object({
-  id: zod.coerce.number(),
-});
+export const getAcknowledgeInterventionUrl = (id: number) => {
+  return `/api/interventions/${id}/acknowledge`;
+};
 
-export const AcknowledgeInterventionResponse = zod.object({
-  id: zod.number(),
-  sessionId: zod.number(),
-  type: zod.enum([
-    "break_suggestion",
-    "focus_mode",
-    "reduce_noise",
-    "warning",
-    "encouragement",
-  ]),
-  message: zod.string(),
-  triggeredAt: zod.coerce.date(),
-  acknowledged: zod.boolean(),
-  acknowledgedAt: zod.coerce.date().nullish(),
-});
+export const acknowledgeIntervention = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Intervention> => {
+  return customFetch<Intervention>(getAcknowledgeInterventionUrl(id), {
+    ...options,
+    method: "PATCH",
+  });
+};
+
+export const getAcknowledgeInterventionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof acknowledgeIntervention>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof acknowledgeIntervention>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["acknowledgeIntervention"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof acknowledgeIntervention>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return acknowledgeIntervention(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AcknowledgeInterventionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof acknowledgeIntervention>>
+>;
+
+export type AcknowledgeInterventionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Acknowledge / dismiss an intervention
+ */
+export const useAcknowledgeIntervention = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof acknowledgeIntervention>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof acknowledgeIntervention>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getAcknowledgeInterventionMutationOptions(options));
+};
 
 /**
  * @summary Get AI-generated cognitive insights
  */
-export const ListInsightsResponseItem = zod.object({
-  id: zod.number(),
-  category: zod.enum([
-    "peak_hours",
-    "session_length",
-    "break_pattern",
-    "fatigue_pattern",
-    "focus_pattern",
-  ]),
-  text: zod.string().describe("Human-readable insight"),
-  confidence: zod.number().describe("0-1 confidence score"),
-  dataPoints: zod.number().optional().describe("Number of data points used"),
-  generatedAt: zod.coerce.date(),
-});
-export const ListInsightsResponse = zod.array(ListInsightsResponseItem);
+export const getListInsightsUrl = () => {
+  return `/api/insights`;
+};
+
+export const listInsights = async (
+  options?: RequestInit,
+): Promise<Insight[]> => {
+  return customFetch<Insight[]>(getListInsightsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListInsightsQueryKey = () => {
+  return [`/api/insights`] as const;
+};
+
+export const getListInsightsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listInsights>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listInsights>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListInsightsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listInsights>>> = ({
+    signal,
+  }) => listInsights({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listInsights>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListInsightsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listInsights>>
+>;
+export type ListInsightsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get AI-generated cognitive insights
+ */
+
+export function useListInsights<
+  TData = Awaited<ReturnType<typeof listInsights>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listInsights>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListInsightsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get the user's cognitive profile
  */
-export const GetProfileResponse = zod.object({
-  id: zod.number(),
-  peakFocusHourStart: zod.number().describe("Hour of day (0-23)"),
-  peakFocusHourEnd: zod.number(),
-  avgAttentionSpanMinutes: zod.number(),
-  fatigueThreshold: zod.number().describe("WPM drop % that indicates fatigue"),
-  baselineWpm: zod.number().nullish(),
-  baselinePauseRate: zod.number().nullish(),
-  totalSessions: zod.number(),
-  totalFocusMinutes: zod.number(),
-  updatedAt: zod.coerce.date().optional(),
-});
+export const getGetProfileUrl = () => {
+  return `/api/profile`;
+};
+
+export const getProfile = async (
+  options?: RequestInit,
+): Promise<CognitiveProfile> => {
+  return customFetch<CognitiveProfile>(getGetProfileUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetProfileQueryKey = () => {
+  return [`/api/profile`] as const;
+};
+
+export const getGetProfileQueryOptions = <
+  TData = Awaited<ReturnType<typeof getProfile>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getProfile>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetProfileQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getProfile>>> = ({
+    signal,
+  }) => getProfile({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getProfile>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetProfileQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getProfile>>
+>;
+export type GetProfileQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the user's cognitive profile
+ */
+
+export function useGetProfile<
+  TData = Awaited<ReturnType<typeof getProfile>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getProfile>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetProfileQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Update user cognitive profile settings
  */
-export const UpdateProfileBody = zod.object({
-  peakFocusHourStart: zod.number().optional(),
-  peakFocusHourEnd: zod.number().optional(),
-  avgAttentionSpanMinutes: zod.number().optional(),
-  fatigueThreshold: zod.number().optional(),
-});
+export const getUpdateProfileUrl = () => {
+  return `/api/profile`;
+};
 
-export const UpdateProfileResponse = zod.object({
-  id: zod.number(),
-  peakFocusHourStart: zod.number().describe("Hour of day (0-23)"),
-  peakFocusHourEnd: zod.number(),
-  avgAttentionSpanMinutes: zod.number(),
-  fatigueThreshold: zod.number().describe("WPM drop % that indicates fatigue"),
-  baselineWpm: zod.number().nullish(),
-  baselinePauseRate: zod.number().nullish(),
-  totalSessions: zod.number(),
-  totalFocusMinutes: zod.number(),
-  updatedAt: zod.coerce.date().optional(),
-});
+export const updateProfile = async (
+  profileUpdate: ProfileUpdate,
+  options?: RequestInit,
+): Promise<CognitiveProfile> => {
+  return customFetch<CognitiveProfile>(getUpdateProfileUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(profileUpdate),
+  });
+};
+
+export const getUpdateProfileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProfile>>,
+    TError,
+    { data: BodyType<ProfileUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateProfile>>,
+  TError,
+  { data: BodyType<ProfileUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateProfile>>,
+    { data: BodyType<ProfileUpdate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateProfile(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateProfile>>
+>;
+export type UpdateProfileMutationBody = BodyType<ProfileUpdate>;
+export type UpdateProfileMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update user cognitive profile settings
+ */
+export const useUpdateProfile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProfile>>,
+    TError,
+    { data: BodyType<ProfileUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateProfile>>,
+  TError,
+  { data: BodyType<ProfileUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateProfileMutationOptions(options));
+};
 
 /**
  * @summary Get dashboard summary (total sessions, avg focus, top hours, etc.)
  */
-export const GetDashboardSummaryResponse = zod.object({
-  totalSessions: zod.number(),
-  completedSessions: zod.number(),
-  totalFocusMinutes: zod.number(),
-  avgFocusScore: zod.number(),
-  avgFatigueIndex: zod.number(),
-  avgDistractionRisk: zod.number(),
-  streakDays: zod.number(),
-  todaySessions: zod.number(),
-  todayFocusMinutes: zod.number(),
-  bestFocusHour: zod.number().nullish(),
-  totalInterventions: zod.number().optional(),
-});
+export const getGetDashboardSummaryUrl = () => {
+  return `/api/analytics/summary`;
+};
+
+export const getDashboardSummary = async (
+  options?: RequestInit,
+): Promise<DashboardSummary> => {
+  return customFetch<DashboardSummary>(getGetDashboardSummaryUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDashboardSummaryQueryKey = () => {
+  return [`/api/analytics/summary`] as const;
+};
+
+export const getGetDashboardSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardSummary>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardSummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDashboardSummaryQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDashboardSummary>>
+  > = ({ signal }) => getDashboardSummary({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardSummary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDashboardSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardSummary>>
+>;
+export type GetDashboardSummaryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get dashboard summary (total sessions, avg focus, top hours, etc.)
+ */
+
+export function useGetDashboardSummary<
+  TData = Awaited<ReturnType<typeof getDashboardSummary>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardSummary>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardSummaryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get productivity trend over recent sessions
  */
-export const getProductivityTrendQueryDaysDefault = 7;
+export const getGetProductivityTrendUrl = (
+  params?: GetProductivityTrendParams,
+) => {
+  const normalizedParams = new URLSearchParams();
 
-export const GetProductivityTrendQueryParams = zod.object({
-  days: zod.coerce.number().default(getProductivityTrendQueryDaysDefault),
-});
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
 
-export const GetProductivityTrendResponseItem = zod.object({
-  date: zod.coerce.date(),
-  avgFocusScore: zod.number(),
-  avgFatigueIndex: zod.number(),
-  sessionCount: zod.number(),
-  totalMinutes: zod.number(),
-});
-export const GetProductivityTrendResponse = zod.array(
-  GetProductivityTrendResponseItem,
-);
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/analytics/productivity-trend?${stringifiedParams}`
+    : `/api/analytics/productivity-trend`;
+};
+
+export const getProductivityTrend = async (
+  params?: GetProductivityTrendParams,
+  options?: RequestInit,
+): Promise<TrendPoint[]> => {
+  return customFetch<TrendPoint[]>(getGetProductivityTrendUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetProductivityTrendQueryKey = (
+  params?: GetProductivityTrendParams,
+) => {
+  return [
+    `/api/analytics/productivity-trend`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetProductivityTrendQueryOptions = <
+  TData = Awaited<ReturnType<typeof getProductivityTrend>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetProductivityTrendParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProductivityTrend>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetProductivityTrendQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getProductivityTrend>>
+  > = ({ signal }) =>
+    getProductivityTrend(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getProductivityTrend>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetProductivityTrendQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getProductivityTrend>>
+>;
+export type GetProductivityTrendQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get productivity trend over recent sessions
+ */
+
+export function useGetProductivityTrend<
+  TData = Awaited<ReturnType<typeof getProductivityTrend>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetProductivityTrendParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProductivityTrend>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetProductivityTrendQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get peak focus hours breakdown
  */
-export const GetPeakHoursResponseItem = zod.object({
-  hour: zod.number().describe("Hour of day 0-23"),
-  avgFocusScore: zod.number(),
-  sessionCount: zod.number(),
-});
-export const GetPeakHoursResponse = zod.array(GetPeakHoursResponseItem);
+export const getGetPeakHoursUrl = () => {
+  return `/api/analytics/peak-hours`;
+};
+
+export const getPeakHours = async (
+  options?: RequestInit,
+): Promise<HourlyFocusPoint[]> => {
+  return customFetch<HourlyFocusPoint[]>(getGetPeakHoursUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPeakHoursQueryKey = () => {
+  return [`/api/analytics/peak-hours`] as const;
+};
+
+export const getGetPeakHoursQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPeakHours>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPeakHours>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPeakHoursQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPeakHours>>> = ({
+    signal,
+  }) => getPeakHours({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPeakHours>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPeakHoursQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPeakHours>>
+>;
+export type GetPeakHoursQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get peak focus hours breakdown
+ */
+
+export function useGetPeakHours<
+  TData = Awaited<ReturnType<typeof getPeakHours>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPeakHours>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPeakHoursQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

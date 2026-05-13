@@ -1,1 +1,0 @@
-# LCA-Lotus-Calm-Index-
